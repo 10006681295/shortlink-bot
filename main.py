@@ -85,5 +85,8 @@ async def verify(client, message):
             )
     else:
         await message.reply_text("❌ Invalid / Used token")
-
+@app.on_message(filters.video)
+async def get_file_id(client, message):
+    file_id = message.video.file_id
+    await message.reply_text(f"FILE_ID:\n{file_id}")
 app.run()
