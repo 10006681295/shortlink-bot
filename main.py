@@ -14,13 +14,10 @@ async def start(client, message):
     link = f"https://gplinks.in/{TOKEN}"
     await message.reply_text(f"🔗 Open link:\n{link}", disable_web_page_preview=True)
 
-@app.on_message(filters.text & ~filters.command)
+@app.on_message(filters.text)
 async def check(client, message):
     if message.text.strip() == TOKEN:
-        await message.reply_video(
-            video="https://www.w3schools.com/html/mov_bbb.mp4",
-            caption="🎉 Here is your video"
-        )
+        await message.reply_text("🎉 Token verified! Video ready.")
     else:
         await message.reply_text("❌ Wrong token")
 
