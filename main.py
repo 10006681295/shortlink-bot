@@ -17,7 +17,12 @@ mongo = AsyncIOMotorClient(MONGO_URI)
 db = mongo["bot"]
 tokens = db["tokens"]
 
-EXPIRY = 43200
+# 👇 तुम्हारा video yaha set hai
+VIDEOS = {
+    "movie": "BAACAgUAAxkBAAMDad3STtMT0Gk9a3TXB2iWk2h4b_YAAjkhAALhPfBWUiobOf1pWeIeBA"
+}
+
+EXPIRY = 43200  # 12 hours
 
 def generate_token():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -41,10 +46,15 @@ async def start(client, message):
 
     joined = await check_join(client, message.from_user.id)
     if not joined:
-        await message.reply_text(f"🚫 पहले join करो:\nhttps://t.me/{CHANNEL}")
+        await message.reply_text(f"🚫 पहले channel join करो:\nhttps://t.me/{CHANNEL}")
         return
 
-    param = message.command[1] if len(message.command) > 1 else "default"
+    param = message.command[1] if len(message.command) > 1 else "movie"
+
+    file_id = VIDEOS.get(param)
+    if not file_id:
+        await message.reply_text("❌ Video not found")
+        return
 
     token = generate_token()
     now = int(time.time())
@@ -52,14 +62,15 @@ async def start(client, message):
     await tokens.insert_one({
         "user_id": message.from_user.id,
         "token": token,
-        "created_at": now
+        "created_at": now,
+        "file_id": file_id
     })
 
     deep_link = f"https://t.me/{message.bot.username}?start={token}"
     short_link = await shorten_link(deep_link)
 
     await message.reply_text(
-        f"🔗 Link complete करो:\n{short_link}\n\n⏳ 12 घंटे valid\n\nToken भेजो"
+        f"🔗 Link open करो:\n{short_link}\n\n⏳ 12 घंटे valid\n\nToken भेजो"
     )
 
 @app.on_message(filters.text)
@@ -75,18 +86,15 @@ async def verify(client, message):
 
         if now - data["created_at"] > EXPIRY:
             await tokens.delete_one({"_id": data["_id"]})
-            await message.reply_text("⏰ Expired")
+            await message.reply_text("⏰ Token expired")
         else:
             await tokens.delete_one({"_id": data["_id"]})
 
             await message.reply_video(
-                video="https://www.w3schools.com/html/mov_bbb.mp4",
+                video=data["file_id"],
                 caption="🎉 Access Granted!"
             )
     else:
         await message.reply_text("❌ Invalid / Used token")
-@app.on_message(filters.video)
-async def get_file_id(client, message):
-    file_id = message.video.file_id
-    await message.reply_text(f"FILE_ID:\n{file_id}")
+
 app.run()
