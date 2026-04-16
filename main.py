@@ -70,9 +70,7 @@ async def start_command(client, message):
         return
 
     if len(message.command) < 2:
-        await message.reply_text(
-            "❌ Invalid link"
-        )
+        await message.reply_text("❌ Invalid link")
         return
 
     param = message.command[1]
@@ -113,12 +111,11 @@ async def save_video(client, message):
         return
 
     file_id = message.video.file_id
+    app.file_id_temp = file_id
 
     await message.reply_text(
-        "Video मिला ✅\n\nअब ये command भेजो:\n\n/add movie1"
+        "✅ Video मिल गई\n\nअब ये command भेजो:\n/add movie1"
     )
-
-    app.file_id_temp = file_id
 
 @app.on_message(filters.command("add"))
 async def add_video(client, message):
@@ -131,7 +128,7 @@ async def add_video(client, message):
         return
 
     if not hasattr(app, "file_id_temp"):
-        await message.reply_text("पहले video भेजो")
+        await message.reply_text("❌ पहले video भेजो")
         return
 
     name = message.command[1].lower()
@@ -154,10 +151,13 @@ async def add_video(client, message):
         f"Link:\n{link}"
     )
 
-@app.on_message(filters.text & ~filters.command(["start", "add"]))
-async def verify_token(client, message):
+@app.on_message(filters.command("list"))
+async def list_videos(client, message):
 
-    joined = await check_join(client, message.from_user.id)
+    if message.from_user.id != OWNER_ID:
+        return
 
-    if not joined:
-        await message.reply_text(
+    text = "📂 Saved Videos:\n\n"
+
+    async for video in videos.find():
+        text += f"{video['name']}\nhttps://t.
