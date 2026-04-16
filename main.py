@@ -160,4 +160,93 @@ async def add_video(client, message):
 @app.on_message(filters.command("list"))
 async def list_videos(client, message):
 
-    if message.from_user.id != OWNER_ID:      
+    if message.from_user.id != OWNER_ID:
+        return
+
+    text = "📂 Saved Videos:\n\n"
+
+    async for video in videos.find():
+        text += f"{video['name']}\nhttps://t.me/{BOT_USERNAME}?start={video['name']}\n\n"
+
+    await message.reply_text(text)
+
+@app.on_message(filters.command("delete"))
+async def delete_video(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    if len(message.command) < 2:
+        await message.reply_text("Usage:\n/delete movie1")
+        return
+
+    name = message.command[1].lower()
+
+    result = await videos.delete_one({"name": name})
+
+    if result.deleted_count > 0:
+        await message.reply_text("✅ Deleted successfully")
+    else:
+        await message.reply_text("❌ Video not found")
+
+@app.on_message(filters.command("cleanup"))
+async def cleanup_command(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    await tokens.delete_many({})
+    await message.reply_text("✅ All tokens deleted")
+
+@app.on_message(filters.text)
+async def verify_token(client, message):
+
+    if message.text.startswith("/start"):
+        return
+
+    if message.text.startswith("/add"):
+        return
+
+    if message.text.startswith("/list"):
+        return
+
+    if message.text.startswith("/delete"):
+        return
+
+    if message.text.startswith("/cleanup"):
+        return
+
+    joined = await check_join(client, message.from_user.id)
+
+    if not joined:
+        await message.reply_text(
+            f"🚫 पहले channel join करो:\nhttps://t.me/{CHANNEL}"
+        )
+        return
+
+    entered_token = message.text.strip()
+
+    data = await tokens.find_one({
+        "user_id": message.from_user.id,
+        "token": entered_token
+    })
+
+    if not data:
+        await message.reply_text("❌ Invalid / Expired / Already Used Token")
+        return
+
+    now = int(time.time())
+
+    if now - data["created_at"] > EXPIRY:
+        await tokens.delete_one({"_id": data["_id"]})
+        await message.reply_text("⏰ Token expired! Use link again")
+        return
+
+    await tokens.delete_one({"_id": data["_id"]})
+
+    await message.reply_video(
+        video=data["file_id"],
+        caption="🎉 Access Granted!"
+    )
+
+app.run()
