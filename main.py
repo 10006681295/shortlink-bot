@@ -104,13 +104,18 @@ async def start_command(client, message):
         f"❌ Token सिर्फ 1 बार काम करेगा"
     )
 
-@app.on_message(filters.video & filters.private)
+@app.on_message((filters.video | filters.document) & filters.private)
 async def save_video(client, message):
 
     if message.from_user.id != OWNER_ID:
         return
 
+    if message.video:
     file_id = message.video.file_id
+elif message.document:
+    file_id = message.document.file_id
+else:
+    return
     app.file_id_temp = file_id
 
     await message.reply_text(
