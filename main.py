@@ -160,4 +160,6 @@ async def list_videos(client, message):
     text = "📂 Saved Videos:\n\n"
 
     async for video in videos.find():
-        text += f"{video['name']}\nhttps://t.
+        text += f"{video['name']}\nhttps://t.me/{BOT_USERNAME}?start={video['name']}\n\n"
+
+    await message.reply_text(text)
