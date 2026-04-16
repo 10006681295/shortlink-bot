@@ -14,6 +14,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 GPLINK_API = os.getenv("GPLINK_API")
 CHANNEL = os.getenv("CHANNEL_USERNAME")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
+OWNER_ID = int(os.getenv("OWNER_ID"))
 
 app = Client(
     "bot",
@@ -24,13 +25,11 @@ app = Client(
 
 mongo = AsyncIOMotorClient(MONGO_URI)
 db = mongo["bot_db"]
+
 tokens = db["tokens"]
+videos = db["videos"]
 
 EXPIRY = 43200
-
-VIDEOS = {
-    "movie": "BAACAgUAAxkBAAMDad3STtMT0Gk9a3TXB2iWk2h4b_YAAjkhAALhPfBWUiobOf1pWeIeBA"
-}
 
 def generate_token():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -70,14 +69,17 @@ async def start_command(client, message):
         )
         return
 
-    param = "movie"
+    if len(message.command) < 2:
+        await message.reply_text(
+            "❌ Invalid link"
+        )
+        return
 
-    if len(message.command) > 1:
-        param = message.command[1]
+    param = message.command[1]
 
-    file_id = VIDEOS.get(param)
+    video_data = await videos.find_one({"name": param})
 
-    if not file_id:
+    if not video_data:
         await message.reply_text("❌ Video not found")
         return
 
@@ -88,7 +90,7 @@ async def start_command(client, message):
         "user_id": message.from_user.id,
         "token": token,
         "created_at": now,
-        "file_id": file_id
+        "file_id": video_data["file_id"]
     })
 
     deep_link = f"https://t.me/{BOT_USERNAME}?start={token}"
@@ -104,55 +106,58 @@ async def start_command(client, message):
         f"❌ Token सिर्फ 1 बार काम करेगा"
     )
 
-@app.on_message(filters.video)
-async def get_file_id(client, message):
-    file_id = message.video.file_id
-    await message.reply_text(f"FILE_ID:\n{file_id}")
+@app.on_message(filters.video & filters.private)
+async def save_video(client, message):
 
-@app.on_message(filters.text & ~filters.command(["start", "cleanup"]))
+    if message.from_user.id != OWNER_ID:
+        return
+
+    file_id = message.video.file_id
+
+    await message.reply_text(
+        "Video मिला ✅\n\nअब ये command भेजो:\n\n/add movie1"
+    )
+
+    app.file_id_temp = file_id
+
+@app.on_message(filters.command("add"))
+async def add_video(client, message):
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    if len(message.command) < 2:
+        await message.reply_text("Usage:\n/add movie1")
+        return
+
+    if not hasattr(app, "file_id_temp"):
+        await message.reply_text("पहले video भेजो")
+        return
+
+    name = message.command[1].lower()
+
+    existing = await videos.find_one({"name": name})
+
+    if existing:
+        await videos.delete_one({"name": name})
+
+    await videos.insert_one({
+        "name": name,
+        "file_id": app.file_id_temp
+    })
+
+    link = f"https://t.me/{BOT_USERNAME}?start={name}"
+
+    await message.reply_text(
+        f"✅ Video saved successfully\n\n"
+        f"Name: {name}\n\n"
+        f"Link:\n{link}"
+    )
+
+@app.on_message(filters.text & ~filters.command(["start", "add"]))
 async def verify_token(client, message):
 
     joined = await check_join(client, message.from_user.id)
 
     if not joined:
         await message.reply_text(
-            f"🚫 पहले channel join करो:\nhttps://t.me/{CHANNEL}"
-        )
-        return
-
-    entered_token = message.text.strip()
-
-    data = await tokens.find_one({
-        "user_id": message.from_user.id,
-        "token": entered_token
-    })
-
-    if not data:
-        await message.reply_text("❌ Invalid / Expired / Already Used Token")
-        return
-
-    now = int(time.time())
-
-    if now - data["created_at"] > EXPIRY:
-        await tokens.delete_one({"_id": data["_id"]})
-        await message.reply_text("⏰ Token expired! Use /start again")
-        return
-
-    await tokens.delete_one({"_id": data["_id"]})
-
-    await message.reply_video(
-        video=data["file_id"],
-        caption="🎉 Access Granted!"
-    )
-
-@app.on_message(filters.command("cleanup"))
-async def cleanup_command(client, message):
-    owner_id = message.from_user.id
-
-    if owner_id != 8529172721:
-        return
-
-    await tokens.delete_many({})
-    await message.reply_text("✅ All tokens deleted")
-
-app.run()
