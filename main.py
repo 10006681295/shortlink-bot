@@ -14,7 +14,7 @@ MONGO_URI = os.getenv("MONGO_URI")
 GPLINK_API = os.getenv("GPLINK_API")
 CHANNEL = os.getenv("CHANNEL_USERNAME")
 BOT_USERNAME = os.getenv("BOT_USERNAME")
-OWNER_ID = int(os.getenv("OWNER_ID"))
+OWNER_ID = int(os.getenv("OWNER_ID", "1853401283"))
 
 app = Client(
     "bot",
