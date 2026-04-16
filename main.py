@@ -3,7 +3,6 @@ import os
 import random
 import string
 import time
-import asyncio
 import aiohttp
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram.errors import UserNotParticipant
@@ -27,7 +26,7 @@ mongo = AsyncIOMotorClient(MONGO_URI)
 db = mongo["bot_db"]
 tokens = db["tokens"]
 
-EXPIRY = 43200  # 12 hours
+EXPIRY = 43200
 
 VIDEOS = {
     "movie": "BAACAgUAAxkBAAMDad3STtMT0Gk9a3TXB2iWk2h4b_YAAjkhAALhPfBWUiobOf1pWeIeBA"
@@ -59,18 +58,6 @@ async def check_join(client, user_id):
         return False
     except:
         return False
-
-async def cleanup_tokens():
-    while True:
-        now = int(time.time())
-
-        await tokens.delete_many({
-            "created_at": {
-                "$lt": now - EXPIRY
-            }
-        })
-
-        await asyncio.sleep(3600)
 
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
@@ -122,7 +109,7 @@ async def get_file_id(client, message):
     file_id = message.video.file_id
     await message.reply_text(f"FILE_ID:\n{file_id}")
 
-@app.on_message(filters.text & ~filters.command(["start"]))
+@app.on_message(filters.text & ~filters.command(["start", "cleanup"]))
 async def verify_token(client, message):
 
     joined = await check_join(client, message.from_user.id)
@@ -159,3 +146,13 @@ async def verify_token(client, message):
     )
 
 @app.on_message(filters.command("cleanup"))
+async def cleanup_command(client, message):
+    owner_id = message.from_user.id
+
+    if owner_id != 8529172721:
+        return
+
+    await tokens.delete_many({})
+    await message.reply_text("✅ All tokens deleted")
+
+app.run()
