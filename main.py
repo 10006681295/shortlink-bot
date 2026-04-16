@@ -1,8 +1,12 @@
 from pyrogram import Client, filters
-import os, random, string, time
+import os
+import random
+import string
+import time
+import asyncio
+import aiohttp
 from motor.motor_asyncio import AsyncIOMotorClient
 from pyrogram.errors import UserNotParticipant
-import aiohttp
 
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
@@ -10,29 +14,42 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 GPLINK_API = os.getenv("GPLINK_API")
 CHANNEL = os.getenv("CHANNEL_USERNAME")
+BOT_USERNAME = os.getenv("BOT_USERNAME")
 
-app = Client("bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+app = Client(
+    "bot",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    bot_token=BOT_TOKEN
+)
 
 mongo = AsyncIOMotorClient(MONGO_URI)
-db = mongo["bot"]
+db = mongo["bot_db"]
 tokens = db["tokens"]
 
-# 👇 तुम्हारा video yaha set hai
+EXPIRY = 43200  # 12 hours
+
 VIDEOS = {
     "movie": "BAACAgUAAxkBAAMDad3STtMT0Gk9a3TXB2iWk2h4b_YAAjkhAALhPfBWUiobOf1pWeIeBA"
 }
-
-EXPIRY = 43200  # 12 hours
 
 def generate_token():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
 async def shorten_link(url):
-    api_url = f"https://gplinks.in/api?api={GPLINK_API}&url={url}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(api_url) as res:
-            data = await res.json()
-            return data["shortenedUrl"]
+    try:
+        api_url = f"https://gplinks.in/api?api={GPLINK_API}&url={url}"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_url) as response:
+                data = await response.json()
+
+                if "shortenedUrl" in data:
+                    return data["shortenedUrl"]
+
+                return url
+    except:
+        return url
 
 async def check_join(client, user_id):
     try:
@@ -40,18 +57,39 @@ async def check_join(client, user_id):
         return True
     except UserNotParticipant:
         return False
+    except:
+        return False
+
+async def cleanup_tokens():
+    while True:
+        now = int(time.time())
+
+        await tokens.delete_many({
+            "created_at": {
+                "$lt": now - EXPIRY
+            }
+        })
+
+        await asyncio.sleep(3600)
 
 @app.on_message(filters.command("start"))
-async def start(client, message):
+async def start_command(client, message):
 
     joined = await check_join(client, message.from_user.id)
+
     if not joined:
-        await message.reply_text(f"🚫 पहले channel join करो:\nhttps://t.me/{CHANNEL}")
+        await message.reply_text(
+            f"🚫 पहले हमारा channel join करो:\n\nhttps://t.me/{CHANNEL}\n\nफिर /start भेजो"
+        )
         return
 
-    param = message.command[1] if len(message.command) > 1 else "movie"
+    param = "movie"
+
+    if len(message.command) > 1:
+        param = message.command[1]
 
     file_id = VIDEOS.get(param)
+
     if not file_id:
         await message.reply_text("❌ Video not found")
         return
@@ -66,35 +104,58 @@ async def start(client, message):
         "file_id": file_id
     })
 
-    deep_link = f"https://t.me/{message.bot.username}?start={token}"
+    deep_link = f"https://t.me/{BOT_USERNAME}?start={token}"
     short_link = await shorten_link(deep_link)
 
     await message.reply_text(
-        f"🔗 Link open करो:\n{short_link}\n\n⏳ 12 घंटे valid\n\nToken भेजो"
+        f"🔥 Download Unlock System 🔥\n\n"
+        f"👉 Step 1: नीचे वाला link open करो\n\n"
+        f"{short_link}\n\n"
+        f"👉 Step 2: Token copy करो\n"
+        f"👉 Step 3: Token यहाँ भेजो\n\n"
+        f"⏳ Token Validity: 12 Hours\n"
+        f"❌ Token सिर्फ 1 बार काम करेगा"
     )
 
-@app.on_message(filters.text)
-async def verify(client, message):
+@app.on_message(filters.video)
+async def get_file_id(client, message):
+    file_id = message.video.file_id
+    await message.reply_text(f"FILE_ID:\n{file_id}")
+
+@app.on_message(filters.text & ~filters.command(["start"]))
+async def verify_token(client, message):
+
+    joined = await check_join(client, message.from_user.id)
+
+    if not joined:
+        await message.reply_text(
+            f"🚫 पहले channel join करो:\nhttps://t.me/{CHANNEL}"
+        )
+        return
+
+    entered_token = message.text.strip()
 
     data = await tokens.find_one({
         "user_id": message.from_user.id,
-        "token": message.text.strip()
+        "token": entered_token
     })
 
-    if data:
-        now = int(time.time())
+    if not data:
+        await message.reply_text("❌ Invalid / Expired / Already Used Token")
+        return
 
-        if now - data["created_at"] > EXPIRY:
-            await tokens.delete_one({"_id": data["_id"]})
-            await message.reply_text("⏰ Token expired")
-        else:
-            await tokens.delete_one({"_id": data["_id"]})
+    now = int(time.time())
 
-            await message.reply_video(
-                video=data["file_id"],
-                caption="🎉 Access Granted!"
-            )
-    else:
-        await message.reply_text("❌ Invalid / Used token")
+    if now - data["created_at"] > EXPIRY:
+        await tokens.delete_one({"_id": data["_id"]})
+        await message.reply_text("⏰ Token expired! Use /start again")
+        return
 
-app.run()
+    await tokens.delete_one({"_id": data["_id"]})
+
+    await message.reply_video(
+        video=data["file_id"],
+        caption="🎉 Access Granted!"
+    )
+
+@app.on_message(filters.command("cleanup"))
