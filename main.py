@@ -30,6 +30,7 @@ tokens = db["tokens"]
 videos = db["videos"]
 
 EXPIRY = 43200
+batch_files = []
 
 def generate_token():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -88,7 +89,7 @@ async def start_command(client, message):
         "user_id": message.from_user.id,
         "token": token,
         "created_at": now,
-        "file_id": video_data["file_id"]
+        "file_data": video_data
     })
 
     deep_link = f"https://t.me/{BOT_USERNAME}?start={token}"
@@ -107,6 +108,8 @@ async def start_command(client, message):
 @app.on_message((filters.video | filters.document) & filters.private)
 async def save_video(client, message):
 
+    global batch_files
+
     if message.from_user.id != OWNER_ID:
         return
 
@@ -118,9 +121,13 @@ async def save_video(client, message):
         return
 
     app.file_id_temp = file_id
+    batch_files.append(file_id)
 
     await message.reply_text(
-        "✅ Video मिल गई\n\nअब ये command भेजो:\n/add movie1"
+        f"✅ Video added\n\n"
+        f"Batch size: {len(batch_files)}\n\n"
+        f"Single save:\n/add movie1\n\n"
+        f"Batch save:\n/addbatch series1"
     )
 
 @app.on_message(filters.command("add"))
@@ -146,16 +153,56 @@ async def add_video(client, message):
 
     await videos.insert_one({
         "name": name,
-        "file_id": app.file_id_temp
+        "file_id": app.file_id_temp,
+        "type": "single"
     })
 
     link = f"https://t.me/{BOT_USERNAME}?start={name}"
 
     await message.reply_text(
-        f"✅ Video saved successfully\n\n"
+        f"✅ Single video saved\n\n"
         f"Name: {name}\n\n"
         f"Link:\n{link}"
     )
+
+@app.on_message(filters.command("addbatch"))
+async def add_batch(client, message):
+
+    global batch_files
+
+    if message.from_user.id != OWNER_ID:
+        return
+
+    if len(message.command) < 2:
+        await message.reply_text("Usage:\n/addbatch series1")
+        return
+
+    if len(batch_files) == 0:
+        await message.reply_text("❌ पहले videos भेजो")
+        return
+
+    name = message.command[1].lower()
+
+    existing = await videos.find_one({"name": name})
+
+    if existing:
+        await videos.delete_one({"name": name})
+
+    await videos.insert_one({
+        "name": name,
+        "file_ids": batch_files,
+        "type": "batch"
+    })
+
+    link = f"https://t.me/{BOT_USERNAME}?start={name}"
+
+    await message.reply_text(
+        f"✅ Batch saved successfully\n\n"
+        f"Videos: {len(batch_files)}\n\n"
+        f"Link:\n{link}"
+    )
+
+    batch_files = []
 
 @app.on_message(filters.command("list"))
 async def list_videos(client, message):
@@ -201,20 +248,18 @@ async def cleanup_command(client, message):
 @app.on_message(filters.text)
 async def verify_token(client, message):
 
-    if message.text.startswith("/start"):
-        return
+    blocked_commands = [
+        "/start",
+        "/add",
+        "/addbatch",
+        "/list",
+        "/delete",
+        "/cleanup"
+    ]
 
-    if message.text.startswith("/add"):
-        return
-
-    if message.text.startswith("/list"):
-        return
-
-    if message.text.startswith("/delete"):
-        return
-
-    if message.text.startswith("/cleanup"):
-        return
+    for cmd in blocked_commands:
+        if message.text.startswith(cmd):
+            return
 
     joined = await check_join(client, message.from_user.id)
 
@@ -244,9 +289,18 @@ async def verify_token(client, message):
 
     await tokens.delete_one({"_id": data["_id"]})
 
-    await message.reply_video(
-        video=data["file_id"],
-        caption="🎉 Access Granted!"
-    )
+    video_data = data["file_data"]
+
+    if video_data.get("type") == "batch":
+        for file_id in video_data["file_ids"]:
+            await message.reply_video(
+                video=file_id,
+                caption="🎉 Access Granted!"
+            )
+    else:
+        await message.reply_video(
+            video=video_data["file_id"],
+            caption="🎉 Access Granted!"
+        )
 
 app.run()
