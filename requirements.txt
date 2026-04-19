@@ -1,4 +1,6 @@
 pyrogram
 tgcrypto
-aiohttp
 motor
+aiohttp
+qrcode
+pillow
