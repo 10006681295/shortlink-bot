@@ -4,6 +4,3 @@ motor
 aiohttp
 qrcode
 pillow
-razorpay
-flask
-gunicorn
