@@ -95,7 +95,6 @@ async def cb(client, query):
         bio = BytesIO(); bio.name = "p.png"; qr.save(bio, "PNG"); bio.seek(0)
         await payments.insert_one({"user_id": query.from_user.id, "payment_id": pid, "days": int(days[:-1])})
         
-        # EXACT QR CAPTION FROM IMAGE_11.PNG
         await query.message.reply_photo(
             photo=bio, 
             caption=(
@@ -117,7 +116,6 @@ async def verify(client, message):
     pid, utr = message.command[1], message.command[2]
     pay = await payments.find_one({"payment_id": pid})
     if pay:
-        # EXACT ADMIN CAPTION FROM IMAGE_5.PNG
         await client.send_message(OWNER_ID, f"💰 **New Premium Request**\n\nUser ID: `{message.from_user.id}`\nPlan: {pay['days']} Days\nPayment ID: {pid}\nUTR: {utr}\n\n`/approve {message.from_user.id} {pay['days']}`")
         await message.reply_text("✅ Sent to admin for approval!")
 
@@ -130,7 +128,7 @@ async def approve(client, message):
     await client.send_message(uid, "🎉 Activated!")
     await message.reply_text("✅ Done!")
 
-# --- OWNER: VIDEO ADDING (EXACT LOOK FROM IMAGE_2.PNG) ---
+# --- OWNER: VIDEO ADDING ---
 @app.on_message((filters.video | filters.document) & filters.private)
 async def handle_video(client, message):
     if message.from_user.id != OWNER_ID: return
@@ -140,7 +138,6 @@ async def handle_video(client, message):
     app.batch_data[OWNER_ID].append(fid)
     app.last_fid = fid
 
-    # EXACT FORMAT FROM IMAGE_2.PNG
     await message.reply_text(
         f"✅ **Video added**\n\n"
         f"Batch size: {len(app.batch_data[OWNER_ID])}\n\n"
@@ -153,8 +150,14 @@ async def add_single(client, message):
     if message.from_user.id != OWNER_ID or len(message.command) < 2: return
     name = message.command[1].lower()
     await videos.update_one({"name": name}, {"$set": {"file_id": app.last_fid, "type": "single"}}, upsert=True)
-    # EXACT SINGLE SAVE CAPTION
-    await message.reply_text(f"Videos: 1\n\nLink:\nhttps://t.me/{BOT_USERNAME}?start={name}")
+    
+    # CLICK AND WATCH LINE ADDED
+    await message.reply_text(
+        f"Videos: 1\n\n"
+        f"Click and Watch 👇\n"
+        f"https://t.me/{BOT_USERNAME}?start={name}",
+        disable_web_page_preview=True
+    )
 
 @app.on_message(filters.command("addbatch"))
 async def add_batch(client, message):
@@ -167,8 +170,14 @@ async def add_batch(client, message):
     size = len(f_list)
     app.batch_data[OWNER_ID] = [] 
     
-    # EXACT BATCH SAVE CAPTION FROM IMAGE_10.PNG
-    await message.reply_text(f"✅ **Batch Saved**\n\nVideos: {size}\n\nLink:\nhttps://t.me/{BOT_USERNAME}?start={name}")
+    # CLICK AND WATCH LINE ADDED
+    await message.reply_text(
+        f"✅ **Batch Saved**\n\n"
+        f"Videos: {size}\n\n"
+        f"Click and Watch 👇\n"
+        f"https://t.me/{BOT_USERNAME}?start={name}",
+        disable_web_page_preview=True
+    )
 
 if __name__ == "__main__":
     keep_alive()
