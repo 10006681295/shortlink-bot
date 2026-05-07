@@ -1,4 +1,4 @@
- import os
+import os
 import time
 import random
 import string
@@ -125,7 +125,6 @@ async def callback_handler(client, callback_query):
 
         await payments.insert_one({"user_id": callback_query.from_user.id, "payment_id": p_id, "days": plan["days"], "amount": plan["price"], "status": "pending"})
         
-        # This is the updated part matching your image request
         await callback_query.message.reply_photo(
             photo=bio,
             caption=(
