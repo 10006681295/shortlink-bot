@@ -120,7 +120,13 @@ async def start_command(client, message):
         return
 
     param = message.command[1]
-
+if param.startswith("verify_"):
+    param = param.replace("verify_", "")
+else:
+    await message.reply_text(
+        "❌ Please verify using GPLinks"
+    )
+    return
     token_data = await tokens.find_one({
         "user_id": message.from_user.id,
         "token": param
@@ -191,7 +197,7 @@ async def start_command(client, message):
         "file_data": video_data
     })
 
-    deep_link = f"https://t.me/{BOT_USERNAME}?start={token}"
+    deep_link = f"https://t.me/{BOT_USERNAME}?start=verify_{token}"
     short_link = await shorten_link(deep_link)
 
     await message.reply_text(
