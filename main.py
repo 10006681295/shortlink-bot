@@ -166,11 +166,6 @@ video_data = await videos.find_one({"name": param})
 if not video_data:
     await message.reply_text("❌ Video not found")
     return
-        video_data = await videos.find_one({"name": param})
-
-        if not video_data:
-            await message.reply_text("❌ Video not found")
-            return
 
         premium_data = await premium_users.find_one({
             "user_id": message.from_user.id
