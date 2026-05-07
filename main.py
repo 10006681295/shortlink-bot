@@ -1,4 +1,4 @@
-import os
+ import os
 import time
 import random
 import string
@@ -125,20 +125,17 @@ async def callback_handler(client, callback_query):
 
         await payments.insert_one({"user_id": callback_query.from_user.id, "payment_id": p_id, "days": plan["days"], "amount": plan["price"], "status": "pending"})
         
+        # This is the updated part matching your image request
         await callback_query.message.reply_photo(
             photo=bio,
             caption=(
-                f"💰 **Payment Details**\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📅 Plan: {plan['days']} Days\n"
-                f"💵 Amount: ₹{plan['price']}\n"
-                f"🆔 Payment ID: `{p_id}`\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"❓ **How to verify payment? / Payment verify kaise karein?**\n\n"
-                f"1️⃣ QR scan karke payment karein.\n"
-                f"2️⃣ Payment ke baad niche di gayi command copy karke message box mein bhejein:\n\n"
-                f"`/verify {p_id} YOUR_UTR_NUMBER`\n\n"
-                f"*(Note: Replace YOUR_UTR_NUMBER with actual UTR/Reference number)*"
+                f"💎 Premium Plan Request\n\n"
+                f"Plan: {plan['days']} Days\n"
+                f"Amount: ₹{plan['price']}\n"
+                f"Payment ID: `{p_id}`\n\n"
+                f"QR scan करके payment करो\n\n"
+                f"Payment के बाद यह भेजो:\n"
+                f"`/verify {p_id} YOUR_UTR`"
             )
         )
     await callback_query.answer()
