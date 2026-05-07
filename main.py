@@ -1,4 +1,3 @@
-a
 import os
 import time
 import random
@@ -149,3 +148,4 @@ async def add_b(client, message):
 if __name__ == "__main__":
     keep_alive()
     app.run()
+
