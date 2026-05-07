@@ -1,6 +1,7 @@
 pyrogram
 tgcrypto
 motor
-aiohttp
+dnspython
+flask
 qrcode
 pillow
