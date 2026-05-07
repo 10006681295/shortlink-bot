@@ -11,7 +11,7 @@ from pyrogram.errors import UserNotParticipant
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# --- KEEP-ALIVE ---
+# --- KEEP-ALIVE LOGIC ---
 web = Flask('')
 @web.route('/')
 def home(): return "Bot is Running!"
@@ -23,7 +23,7 @@ def run_web():
 def keep_alive():
     Thread(target=run_web).start()
 
-# --- CONFIG ---
+# --- CONFIGURATION ---
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -40,7 +40,7 @@ mongo = AsyncIOMotorClient(MONGO_URI)
 db = mongo["bot_db"]
 
 videos, premium_users, payments = db["videos"], db["premium_users"], db["payments"]
-batch_files = []
+batch_files = [] # Batch temporary storage
 
 PLANS = {
     "7d": {"days": 7, "price": 19},
@@ -49,6 +49,7 @@ PLANS = {
     "100d": {"days": 100, "price": 99}
 }
 
+# --- FORCE JOIN ---
 async def check_join(client, user_id):
     try:
         await client.get_chat_member(CHANNEL, user_id)
@@ -56,12 +57,14 @@ async def check_join(client, user_id):
     except UserNotParticipant: return False
     except: return False
 
+# --- START COMMAND (PURANA INTERFACE) ---
 @app.on_message(filters.command("start"))
 async def start_command(client, message):
     joined = await check_join(client, message.from_user.id)
     if not joined:
-        await message.reply_text(f"🚫 पहले channel join karo:\n\nhttps://t.me/{CHANNEL_LINK}")
+        await message.reply_text(f"🚫 पहले channel join करो:\n\nhttps://t.me/{CHANNEL_LINK}")
         return
+
     if len(message.command) < 2:
         await message.reply_photo(
             photo="https://i.ibb.co/8D0X0Q7/sample.jpg",
@@ -69,42 +72,71 @@ async def start_command(client, message):
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 GET PREMIUM 💎", callback_data="premium_menu")]])
         )
         return
+
     param = message.command[1].lower()
     v_data = await videos.find_one({"name": param})
     if not v_data:
-        await message.reply_text("❌ Not found!")
+        await message.reply_text("❌ Video not found!")
         return
+
     p_data = await premium_users.find_one({"user_id": message.from_user.id})
     if p_data and p_data["expiry"] > int(time.time()):
         cap = "💎 Premium Access"
         if v_data.get("type") == "batch":
-            for f_id in v_data["file_ids"]: await message.reply_video(video=f_id, caption=cap)
-        else: await message.reply_video(video=v_data["file_id"], caption=cap)
+            for f_id in v_data["file_ids"]:
+                await message.reply_video(video=f_id, caption=cap)
+        else:
+            await message.reply_video(video=v_data["file_id"], caption=cap)
     else:
-        await message.reply_text("⚠️ Premium Required!", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 SUBSCRIBE 💎", callback_data="premium_menu")]]))
+        # Purana Interface for Denied Access
+        await message.reply_text(
+            f"⚠️ **Access Denied!**\n\nBhai, ye file sirf Premium users ke liye hai.\n\n"
+            f"✅ **After buying a plan you can watch all content unlimited time.**\n"
+            f"✅ **Plan lene ke baad aap saara content unlimited baar dekh sakte hain.**",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💎 SUBSCRIBE NOW 💎", callback_data="premium_menu")]])
+        )
 
+# --- CALLBACK HANDLER ---
 @app.on_callback_query()
 async def cb_handler(client, query):
     if query.data == "premium_menu":
         btns = [[InlineKeyboardButton(f"{v['days']} Days - ₹{v['price']}", callback_data=f"buy_{k}")] for k, v in PLANS.items()]
-        await query.message.reply_text("💎 **Choose Plan:**", reply_markup=InlineKeyboardMarkup(btns))
+        await query.message.reply_text(
+            "💎 **Choose Your Plan:**\n\n"
+            "✨ After buy a plan you can watch all content unlimited time.\n"
+            "✨ Plan lene ke baad aap saara content unlimited baar dekh sakte hain.",
+            reply_markup=InlineKeyboardMarkup(btns)
+        )
     elif query.data.startswith("buy_"):
         pk = query.data.replace("buy_", ""); p = PLANS[pk]
         pid = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
         upi = f"upi://pay?pa={UPI_ID}&pn=Premium&am={p['price']}&cu=INR&tn={pid}"
         qr = qrcode.make(upi); bio = BytesIO(); bio.name = "p.png"; qr.save(bio, "PNG"); bio.seek(0)
         await payments.insert_one({"user_id": query.from_user.id, "payment_id": pid, "days": p["days"]})
-        await query.message.reply_photo(photo=bio, caption=f"ID: `{pid}`\n\nVerify: `/verify {pid} UTR`")
+        
+        await query.message.reply_photo(
+            photo=bio,
+            caption=(
+                f"💎 Premium Plan Request\n\n"
+                f"Plan: {p['days']} Days\n"
+                f"Amount: ₹{p['price']}\n"
+                f"Payment ID: `{pid}`\n\n"
+                f"QR scan करके payment करो\n\n"
+                f"Payment के बाद यह भेjo:\n"
+                f"`/verify {pid} YOUR_UTR`"
+            )
+        )
     await query.answer()
 
+# --- ADMIN COMMANDS ---
 @app.on_message(filters.command("verify"))
 async def verify(client, message):
     if len(message.command) < 3: return
     pid, utr = message.command[1], message.command[2]
     pay = await payments.find_one({"payment_id": pid, "user_id": message.from_user.id})
     if pay:
-        await client.send_message(OWNER_ID, f"💰 Payment!\nUID: `{message.from_user.id}`\nUTR: `{utr}`\n`/approve {message.from_user.id} {pay['days']}`")
-        await message.reply_text("✅ Sent to admin!")
+        await client.send_message(OWNER_ID, f"💰 **Payment!**\nUID: `{message.from_user.id}`\nUTR: `{utr}`\nPlan: {pay['days']} Days\n\n`/approve {message.from_user.id} {pay['days']}`")
+        await message.reply_text("✅ Sent to admin for approval!")
 
 @app.on_message(filters.command("approve"))
 async def approve(client, message):
@@ -112,19 +144,22 @@ async def approve(client, message):
     uid, days = int(message.command[1]), int(message.command[2])
     exp = int(time.time()) + (days * 86400)
     await premium_users.update_one({"user_id": uid}, {"$set": {"expiry": exp}}, upsert=True)
-    await client.send_message(uid, "🎉 Activated!")
-    await message.reply_text("✅ Done!")
+    await client.send_message(uid, "🎉 Congratulations! Your Premium is now active.")
+    await message.reply_text("✅ Approved!")
 
-# --- OWNER: CLICKABLE COMMANDS FIX ---
+# --- OWNER: VIDEO SAVING (BATCH FIX & OLD LOOK) ---
 @app.on_message((filters.video | filters.document | filters.animation) & filters.private)
 async def save_video(client, message):
     if message.from_user.id != OWNER_ID: return
     fid = message.video.file_id if message.video else (message.document.file_id if message.document else message.animation.file_id)
     if not fid: return
+    
     app.file_id_temp = fid
-    batch_files.append(fid)
+    batch_files.append(fid) # Har nayi file list mein add hogi
+    
     await message.reply_text(
-        f"✅ **Video added**\n\nBatch size: {len(batch_files)}\n\n"
+        f"✅ **Video added**\n\n"
+        f"Batch size: {len(batch_files)}\n\n"
         f"Single save:\n`/add movie1`\n\n"
         f"Batch save:\n`/addbatch series1`"
     )
@@ -134,18 +169,21 @@ async def add_v(client, message):
     if message.from_user.id != OWNER_ID or len(message.command) < 2: return
     n = message.command[1].lower()
     await videos.update_one({"name": n}, {"$set": {"file_id": app.file_id_temp, "type": "single"}}, upsert=True)
-    await message.reply_text(f"✅ Saved! Link: `https://t.me/{BOT_USERNAME}?start={n}`")
+    await message.reply_text(f"✅ **Saved!**\nLink: `https://t.me/{BOT_USERNAME}?start={n}`")
 
 @app.on_message(filters.command("addbatch"))
 async def add_b(client, message):
     global batch_files
-    if message.from_user.id != OWNER_ID or not batch_files: return
+    if message.from_user.id != OWNER_ID or not batch_files:
+        await message.reply_text("❌ Batch khali hai! Pehle videos bhejo.")
+        return
     n = message.command[1].lower()
+    # Batch save logic
     await videos.update_one({"name": n}, {"$set": {"file_ids": list(batch_files), "type": "batch"}}, upsert=True)
-    batch_files.clear()
-    await message.reply_text(f"✅ Batch Saved! Link: `https://t.me/{BOT_USERNAME}?start={n}`")
+    size = len(batch_files)
+    batch_files.clear() # Save hone ke baad list khali karo
+    await message.reply_text(f"✅ **Batch Saved!** (Total: {size})\nLink: `https://t.me/{BOT_USERNAME}?start={n}`")
 
 if __name__ == "__main__":
     keep_alive()
     app.run()
-
