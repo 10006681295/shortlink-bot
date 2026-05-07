@@ -111,9 +111,61 @@ async def start_command(client, message):
 
     param = message.command[1]
 
-    if param.startswith("verify_"):
-        param = param.replace("verify_", "")
+# TOKEN OPEN
+if param.startswith("verify_"):
+
+    param = param.replace("verify_", "")
+
+    token_data = await tokens.find_one({
+        "user_id": message.from_user.id,
+        "token": param
+    })
+
+    if not token_data:
+        await message.reply_text("❌ Invalid or expired token")
+        return
+
+    now = int(time.time())
+
+    if now - token_data["created_at"] > EXPIRY:
+
+        await tokens.delete_one({
+            "_id": token_data["_id"]
+        })
+
+        await message.reply_text("⏰ Token expired")
+        return
+
+    await tokens.delete_one({
+        "_id": token_data["_id"]
+    })
+
+    video_data = token_data["file_data"]
+
+    if video_data.get("type") == "batch":
+
+        for file_id in video_data["file_ids"]:
+
+            await message.reply_video(
+                video=file_id,
+                caption="🎉 Access Granted"
+            )
+
     else:
+
+        await message.reply_video(
+            video=video_data["file_id"],
+            caption="🎉 Access Granted"
+        )
+
+    return
+
+# ORIGINAL VIDEO LINK
+video_data = await videos.find_one({"name": param})
+
+if not video_data:
+    await message.reply_text("❌ Video not found")
+    return
         video_data = await videos.find_one({"name": param})
 
         if not video_data:
